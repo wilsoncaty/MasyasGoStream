@@ -15,7 +15,7 @@ Di [Streamlit Community Cloud](https://share.streamlit.io), pilih **Create app**
 | --- | --- |
 | Repository | `wilsoncaty/MasyasGoStream` |
 | Branch | `main` |
-| Main file path | `tnsstremqu.py` |
+| Main file path | `masyasgostream.py` |
 | Python version (Advanced settings) | `3.11` |
 
 Klik **Deploy**. Dependency Python tercantum di `requirements.txt`, sedangkan FFmpeg dipasang melalui `packages.txt`. Konfigurasi tema dan batas upload ada di `.streamlit/config.toml`.
@@ -28,7 +28,7 @@ Pasang Python 3.11 dan FFmpeg, lalu pastikan perintah `ffmpeg` tersedia di PATH.
 
 ```sh
 python -m pip install -r requirements.txt
-python -m streamlit run tnsstremqu.py
+python -m streamlit run masyasgostream.py
 ```
 
 Masukkan Stream Key YouTube melalui form aplikasi. Jangan simpan stream key di repository.
