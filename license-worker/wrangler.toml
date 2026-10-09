@@ -1,0 +1,17 @@
+name = "masyas-gostream-license"
+main = "src/index.js"
+compatibility_date = "2026-10-09"
+compatibility_flags = ["nodejs_compat"]
+account_id = "2ddaa9339bf72d8597dfd2764e2b5275"
+workers_dev = true
+
+[[d1_databases]]
+binding = "DB"
+database_name = "masyas-licenses"
+database_id = "f4c95339-af98-412b-8503-ae5d5a56a4c8"
+
+[triggers]
+crons = ["17 3 * * *"]
+
+[observability]
+enabled = false

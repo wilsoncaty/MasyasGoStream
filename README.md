@@ -20,6 +20,8 @@ Di [Streamlit Community Cloud](https://share.streamlit.io), pilih **Create app**
 
 Klik **Deploy**. Dependency Python tercantum di `requirements.txt`, sedangkan FFmpeg dipasang melalui `packages.txt`. Konfigurasi tema dan batas upload ada di `.streamlit/config.toml`.
 
+Aplikasi memerlukan konfigurasi `[gostream_license]` di **Settings → Secrets** dan aktivasi lisensi sebelum dashboard dapat digunakan. Lihat [panduan lisensi dan akun pemilik](license-worker/README.md) serta contoh `.streamlit/secrets.example.toml`. Kunci berlaku 365 hari sejak aktivasi pertama untuk satu deployment; beberapa browser boleh login ke deployment yang sama. Jangan commit konfigurasi privat atau license key.
+
 Lihat [panduan deployment resmi Streamlit](https://docs.streamlit.io/deploy/streamlit-community-cloud/deploy-your-app/deploy).
 
 ## Menjalankan secara lokal

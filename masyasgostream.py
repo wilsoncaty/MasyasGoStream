@@ -6,6 +6,7 @@ import time
 import urllib.request
 import urllib.parse
 from pathlib import Path
+from gostream_runtime import runtime
 
 # Install streamlit jika belum ada
 try:
@@ -22,8 +23,7 @@ UPLOAD_DIR = APP_DIR / "uploads"
 UPLOAD_DIR.mkdir(exist_ok=True)
 
 # Dipakai agar tombol Stop bisa menghentikan proses FFmpeg yang sedang aktif.
-FFMPEG_PROCESS = None
-PROCESS_LOCK = threading.Lock()
+PROCESS_LOCK = runtime.lock
 
 
 def safe_filename(name: str) -> str:
@@ -132,7 +132,6 @@ def make_audio_playlist(audio_paths, repeat_count=1):
 
 
 def run_ffmpeg(mode, video_paths, audio_paths, stream_key, is_shorts, playback_mode, repeat_count, duration_hours, log_callback):
-    global FFMPEG_PROCESS
 
     output_url = f"rtmp://a.rtmp.youtube.com/live2/{stream_key}"
     duration_seconds = int(duration_hours * 3600) if playback_mode == "Durasi streaming" and duration_hours else None
@@ -300,9 +299,13 @@ def run_ffmpeg(mode, video_paths, audio_paths, stream_key, is_shorts, playback_m
             log_callback(f"Streaming dibatasi {duration_hours:g} jam.")
         log_callback("Menjalankan FFmpeg ke YouTube...")
 
+    process = None
     try:
         with PROCESS_LOCK:
-            FFMPEG_PROCESS = subprocess.Popen(
+            if runtime.cancel_requested:
+                log_callback("Streaming dibatalkan sebelum proses dimulai.")
+                return
+            runtime.process = subprocess.Popen(
                 cmd,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
@@ -310,7 +313,7 @@ def run_ffmpeg(mode, video_paths, audio_paths, stream_key, is_shorts, playback_m
                 bufsize=1,
             )
 
-        process = FFMPEG_PROCESS
+            process = runtime.process
         for line in process.stdout:
             line = line.strip()
             if line:
@@ -323,13 +326,14 @@ def run_ffmpeg(mode, video_paths, audio_paths, stream_key, is_shorts, playback_m
         log_callback(f"Error: {e}")
     finally:
         with PROCESS_LOCK:
-            FFMPEG_PROCESS = None
+            if runtime.process is process:
+                runtime.process = None
         log_callback("Streaming selesai atau dihentikan.")
 
 def stop_ffmpeg():
-    global FFMPEG_PROCESS
     with PROCESS_LOCK:
-        process = FFMPEG_PROCESS
+        runtime.cancel_requested = True
+        process = runtime.process
         if process and process.poll() is None:
             try:
                 process.terminate()
@@ -339,12 +343,22 @@ def stop_ffmpeg():
                     process.kill()
             except Exception:
                 pass
-        FFMPEG_PROCESS = None
+        runtime.process = None
+
+
+@st.fragment(run_every="2s")
+def render_stream_logs():
+    if runtime.is_running():
+        st.info("Proses streaming sedang berjalan.")
+    lines = runtime.log_snapshot()
+    if lines:
+        st.text("\n".join(lines[-20:]))
 
 
 def main():
     from gostream_ui import render_brand, render_workspace_title, section, render_footer
     from gostream_monitor import render_monitor
+    from gostream_auth import require_owner, owner_panel, can_start_stream
 
     st.set_page_config(
         page_title="Masyas Go Stream | Streaming Studio",
@@ -362,6 +376,8 @@ def main():
         unsafe_allow_html=True,
     )
     render_brand()
+    license_client = require_owner()
+    owner_panel(license_client)
     render_monitor()
     render_workspace_title()
 
@@ -654,18 +670,7 @@ def main():
                     help="Streaming akan dihentikan otomatis setelah durasi ini.",
                 )
 
-            log_placeholder = st.empty()
-            logs = st.session_state.get("logs", [])
-
-            def log_callback(msg):
-                logs.append(msg)
-                st.session_state["logs"] = logs[-100:]
-                try:
-                    log_placeholder.text("\n".join(st.session_state["logs"][-20:]))
-                except Exception:
-                    print(msg)
-
-            streaming = FFMPEG_PROCESS is not None and FFMPEG_PROCESS.poll() is None
+            streaming = runtime.is_running()
 
             st.markdown('<div class="gs-divider"></div><p class="gs-control-label">KONTROL SIARAN</p>', unsafe_allow_html=True)
             col1, col2 = st.columns(2)
@@ -677,27 +682,25 @@ def main():
                         st.error("Upload minimal 1 file MP3 terlebih dahulu!")
                     elif not stream_key:
                         st.error("Stream Key YouTube harus diisi!")
-                    else:
-                        st.session_state["logs"] = []
-                        thread = threading.Thread(
-                            target=run_ffmpeg,
-                            args=(mode, selected_paths, audio_paths, stream_key, is_shorts, playback_mode, int(repeat_count), duration_hours, log_callback),
-                            daemon=True,
+                    elif can_start_stream(license_client):
+                        launched = runtime.launch(
+                            run_ffmpeg,
+                            (mode, selected_paths, audio_paths, stream_key, is_shorts,
+                             playback_mode, int(repeat_count), duration_hours, runtime.append_log),
                         )
-                        thread.start()
-                        time.sleep(0.5)
-                        st.success("Streaming dimulai ke YouTube!")
+                        if launched:
+                            st.success("Proses streaming sedang dimulai.")
+                            st.rerun()
+                        else:
+                            st.warning("Siaran sudah berjalan pada deployment ini.")
 
             with col2:
                 if st.button("⏹️ Hentikan Streaming", disabled=not streaming, use_container_width=True):
                     stop_ffmpeg()
                     st.warning("Streaming dihentikan!")
+                    st.rerun()
 
-            if FFMPEG_PROCESS is not None and FFMPEG_PROCESS.poll() is None:
-                st.info("🔴 Streaming sedang berjalan...")
-
-            if st.session_state.get("logs"):
-                log_placeholder.text("\n".join(st.session_state["logs"][-20:]))
+            render_stream_logs()
 
     with st.expander("Informasi layanan", expanded=False):
         st.markdown("""

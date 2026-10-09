@@ -90,6 +90,8 @@ html, body, [class*="css"] { font-family: "Segoe UI", sans-serif; }
 .gs-stat-track > span { display:block; height:100%; background:var(--gs-accent); border-radius:6px; }
 .gs-stat-detail { font-size:10px; color:var(--gs-muted); margin-top:12px; line-height:1.4; }
 .gs-stat-remaining { margin-top:9px; font-size:12px; font-weight:650; color:var(--gs-text); line-height:1.5; }
+.gs-license-bar { display:flex; justify-content:space-between; flex-wrap:wrap; gap:10px; padding:13px 17px; margin:0 0 6px; border:1px solid var(--gs-line); border-radius:10px; background:#f8fafc; font-size:12px; color:var(--gs-text); }
+.gs-license-bar span { color:var(--gs-muted); }
 .gs-network-row { display:flex; align-items:center; justify-content:space-between; gap:8px; font-size:12px; color:#64748b; line-height:1.65; font-variant-numeric:tabular-nums; }
 .gs-network-row strong { font-size:14px; font-weight:600; color:#1d4ed8; }
 .gs-download { margin-top:5px; }
