@@ -4,11 +4,48 @@ import os
 import re
 import sys
 import time
+import tomllib
 from pathlib import Path, PurePosixPath
 
 import psutil
 
 APP_DIR = Path(__file__).resolve().parent
+
+
+def service_memory_limit(config=APP_DIR / "monitoring.toml"):
+    """Workspace service limit, explicitly configured rather than inferred from RAM."""
+    try:
+        with Path(config).open("rb") as file:
+            value = float(tomllib.load(file)["service"]["memory_limit_gb"])
+        return int(value * 1_000_000_000) if 0 < value < 1_000_000 else None
+    except (OSError, ValueError, TypeError, KeyError):
+        return None
+
+
+def memory_capacity(memory, service_limit):
+    """Combine measured usage with the smaller visible container/service ceiling."""
+    if memory is None:
+        return None
+    limit, source = memory["limit"], "Batas container"
+    if memory["scope"] == "container" and service_limit is not None:
+        if limit is None or service_limit <= limit:
+            limit, source = service_limit, "Batas layanan Streamlit"
+    return {**memory, "limit": limit, "source": source if limit is not None else "Batas tidak tersedia",
+            "remaining": max(0, limit - memory["used"]) if limit is not None else None}
+
+
+def disk_capacity(root=APP_DIR):
+    """Filesystem holding uploads. Capacity may be shared; it is not an app quota."""
+    upload_dir = root / "uploads"
+    target = upload_dir if upload_dir.is_dir() else root
+    try:
+        disk = psutil.disk_usage(str(target))
+        if disk.total <= 0:
+            return None
+        return {"total": disk.total, "used": disk.used, "free": disk.free,
+                "reserved": max(0, disk.total - disk.used - disk.free)}
+    except (OSError, psutil.Error):
+        return None
 
 
 def read_text(path):

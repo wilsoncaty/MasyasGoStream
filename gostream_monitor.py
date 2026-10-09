@@ -5,7 +5,8 @@ from html import escape
 
 import psutil
 import streamlit as st
-from gostream_resources import container_resources, process_resources, application_storage, network_sample
+from gostream_resources import (container_resources, process_resources, application_storage,
+                                network_sample, disk_capacity, memory_capacity, service_memory_limit)
 
 
 def count_streams():
@@ -39,8 +40,9 @@ def server_sample():
         for name in ("memory", "cpu"):
             if resources[name] is None:
                 resources[name] = fallback[name]
+    resources["memory"] = memory_capacity(resources["memory"], service_memory_limit())
     return {**resources, "streams": count_streams(), "time": time.monotonic(),
-            "network": network_sample(), "storage": storage_sample()}
+            "network": network_sample(), "storage": {"files": storage_sample(), "disk": disk_capacity()}}
 
 
 @st.cache_data(ttl=15, show_spinner=False)
@@ -100,12 +102,18 @@ def format_memory(size):
         size /= 1024
 
 
-def card(title, icon, value, detail, percent=None):
+def format_capacity(size):
+    """Use decimal GB consistently with the service's 2.7 GB label."""
+    return f"{size / 1_000_000_000:,.2f} GB"
+
+
+def card(title, icon, value, detail, percent=None, remaining=None):
     bar = ""
     if percent is not None:
         percent = max(0, min(100, percent))
         bar = f'<div class="gs-stat-track" role="meter" aria-label="{escape(title)}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{percent:.1f}"><span style="width:{percent:.1f}%"></span></div>'
-    return f'<div class="gs-stat-card"><div class="gs-stat-head"><span>{escape(title)}</span><span class="gs-stat-icon" aria-hidden="true">{icon}</span></div><div class="gs-stat-value">{value}</div>{bar}<div class="gs-stat-detail">{escape(detail)}</div></div>'
+    remaining_html = f'<div class="gs-stat-remaining">{escape(remaining)}</div>' if remaining is not None else ""
+    return f'<div class="gs-stat-card"><div class="gs-stat-head"><span>{escape(title)}</span><span class="gs-stat-icon" aria-hidden="true">{icon}</span></div><div class="gs-stat-value">{value}</div>{bar}{remaining_html}<div class="gs-stat-detail">{escape(detail)}</div></div>'
 
 
 @st.fragment(run_every="2s")
@@ -139,20 +147,38 @@ def render_monitor():
     cpu_card = card("CPU aplikasi", "▦", cpu_value, cpu_detail, cpu_percent)
 
     memory_value, memory_detail, memory_percent = "—", "Data tidak tersedia", None
+    memory_remaining = None
     if memory:
-        memory_value = format_memory(memory["used"])
+        memory_value = format_capacity(memory["used"])
         memory_detail = "Container" if memory["scope"] == "container" else "RSS proses aplikasi + FFmpeg"
         if memory["limit"] is not None:
-            memory_value += f'<small> / {format_memory(memory["limit"])}</small>'
+            memory_value += f'<small> / {format_capacity(memory["limit"])}</small>'
             memory_percent = memory["used"] / memory["limit"] * 100
-            memory_detail += " · terpakai / batas terdeteksi"
+            memory_detail = memory["source"] + " · terpakai / batas"
+            memory_remaining = "Sisa terhadap batas: " + format_capacity(memory["remaining"])
+            if memory_percent >= 100:
+                memory_remaining = "Batas RAM tercapai · sisa 0 GB"
+            elif memory_percent >= 90:
+                memory_remaining += " · hampir penuh"
         else:
             memory_detail += " · batas tidak tersedia"
-    memory_card = card("RAM aplikasi", "▤", memory_value, memory_detail, memory_percent)
+    memory_card = card("RAM aplikasi", "▤", memory_value, memory_detail, memory_percent, memory_remaining)
 
     storage = sample["storage"]
-    storage_card = card("Storage file aplikasi", "▣", format_memory(storage) if storage is not None else "—",
-                        "Project & uploads · kuota tidak tersedia" if storage is not None else "Data tidak tersedia")
+    disk, files = storage["disk"], storage["files"]
+    file_detail = "File aplikasi: " + format_memory(files) if files is not None else "Ukuran file aplikasi tidak tersedia"
+    if disk:
+        storage_value = f'{format_capacity(disk["used"])}<small> / {format_capacity(disk["total"])}</small>'
+        storage_remaining = "Sisa disk: " + format_capacity(disk["free"])
+        if disk["free"] == 0:
+            storage_remaining += " · penuh"
+        elif disk["free"] / disk["total"] <= 0.1:
+            storage_remaining += " · hampir penuh"
+        storage_card = card("Disk penyimpanan", "▣", storage_value,
+                            "Disk terdeteksi · bisa dibagi hosting. " + file_detail,
+                            disk["used"] / disk["total"] * 100, storage_remaining)
+    else:
+        storage_card = card("Disk penyimpanan", "▣", "—", file_detail, remaining="Sisa disk tidak bisa dibaca")
     up, down = (format_rate(rate) for rate in rates) if rates is not None else ("—", "—")
     network = sample["network"]
     network_detail = network["scope"] if network else "Data tidak tersedia"
@@ -164,8 +190,8 @@ def render_monitor():
     with st.expander("Sumber dan batas pembacaan"):
         st.markdown("""
 - **Stream aktif:** proses FFmpeg aplikasi yang menggunakan tujuan RTMP. Bukan konfirmasi status live dari YouTube; dapat mencakup beberapa sesi pengguna aplikasi.
-- **RAM:** penggunaan dan batas cgroup container jika bisa dibaca. Jika tidak, jumlah RSS proses aplikasi dan turunannya (termasuk FFmpeg); memori bersama bisa terhitung lebih dari sekali. Tidak memakai total RAM server induk sebagai jatah aplikasi.
+- **RAM:** penggunaan container dibandingkan batas layanan yang dikonfigurasi dari Workspace Settings (2,7 GB). Jika batas container lebih kecil, batas lebih kecil tersebut digunakan. Sisa adalah selisih batas dengan penggunaan saat ini, bukan jumlah file yang aman di-upload. Nilai GB desimal berbeda dari GiB. Jika container tidak bisa dibaca, gunakan RSS proses aplikasi dan turunannya tanpa mengasumsikan jatah cloud; memori bersama bisa terhitung lebih dari sekali.
 - **CPU:** persentase pemakaian terhadap batas CPU cgroup yang terdeteksi. Jika batas tidak tersedia, ditampilkan dalam core terpakai; 1 core berarti satu CPU penuh. Ini pembacaan runtime, bukan janji resource paket hosting.
-- **Storage:** ukuran logis file project dan uploads, tidak termasuk environment Python, cache, atau Git. Kuota storage hosting tidak diketahui, sehingga tidak ditampilkan sebagai persentase disk server.
+- **Disk penyimpanan:** total, terpakai, dan ruang disk tersedia pada filesystem tempat folder uploads berada. Disk dapat dibagi dengan aplikasi/proses hosting lain; angka ini bukan kuota eksklusif aplikasi atau janji seluruh ruang bebas dapat dipakai. File yang disimpan menambah pemakaian; sisa juga dapat berubah karena aktivitas lain. Sebagian ruang dapat dicadangkan sistem, sehingga total dikurangi terpakai tidak selalu sama dengan sisa yang tersedia. Ukuran file aplikasi dihitung terpisah, tanpa Git, environment Python, atau cache.
 - **Trafik:** perubahan byte kirim/terima pada interface non-loopback dalam namespace jaringan yang terlihat oleh aplikasi. Bisa mencakup proses lain jika namespace dibagi. Di komputer lokal, cakupannya jaringan komputer tersebut. Bukan speed test atau pengukuran khusus YouTube.
 """)

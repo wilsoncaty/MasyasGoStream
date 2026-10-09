@@ -1,0 +1,4 @@
+# Batas layanan yang ditampilkan di Workspace Settings pengguna pada 2026-10-09.
+# GB desimal (1 GB = 1.000.000.000 byte), bukan GiB.
+[service]
+memory_limit_gb = 2.7

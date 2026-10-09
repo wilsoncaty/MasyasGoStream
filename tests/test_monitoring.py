@@ -75,10 +75,11 @@ class MonitoringTests(unittest.TestCase):
              patch("gostream_monitor.container_resources", return_value={'cpu': None, 'memory': None}), \
              patch("gostream_monitor.process_resources", return_value={'cpu': None, 'memory': None}), \
              patch("gostream_monitor.storage_sample", return_value=None), \
+             patch("gostream_monitor.disk_capacity", return_value=None), \
              patch("gostream_monitor.network_sample", return_value=None):
             result = server_sample()
             result.pop('time')
-            self.assertEqual(result, {"streams": None, "cpu": None, "memory": None, "network": None, 'storage': None})
+            self.assertEqual(result, {"streams": None, "cpu": None, "memory": None, "network": None, 'storage': {'files': None, 'disk': None}})
         server_sample.clear()
 
 

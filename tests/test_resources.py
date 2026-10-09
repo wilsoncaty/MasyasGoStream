@@ -5,7 +5,8 @@ from types import SimpleNamespace
 from unittest.mock import Mock, patch, MagicMock
 
 from gostream_resources import (cgroup_locations, container_resources, process_resources,
-                               application_storage, network_sample, cpuset_count)
+                               application_storage, network_sample, cpuset_count,
+                               disk_capacity, memory_capacity, service_memory_limit)
 
 
 class ResourceTests(unittest.TestCase):
@@ -116,6 +117,45 @@ class ResourceTests(unittest.TestCase):
         result = network_sample()
         self.assertEqual(result['interfaces'], {'eth0': (100, 200)})
         self.assertEqual(result['identity'], 'net:[123]')
+
+    def test_memory_shows_workspace_limit_and_remaining_in_decimal_gb(self):
+        config = self.root / 'monitoring.toml'
+        self.put(config, '[service]\nmemory_limit_gb = 2.7')
+        service = service_memory_limit(config)
+        self.assertEqual(service, 2700000000)
+        result = memory_capacity({'used': 1500000000, 'limit': 3 * 1024**3, 'scope': 'container'}, service)
+        self.assertEqual(result['limit'], 2700000000)
+        self.assertEqual(result['remaining'], 1200000000)
+        self.assertEqual(result['source'], 'Batas layanan Streamlit')
+
+    def test_smaller_container_limit_wins_and_remaining_never_negative(self):
+        result = memory_capacity({'used': 1100000000, 'limit': 1000000000, 'scope': 'container'}, 2700000000)
+        self.assertEqual(result['limit'], 1000000000)
+        self.assertEqual(result['remaining'], 0)
+        self.assertEqual(result['source'], 'Batas container')
+
+    def test_local_process_memory_does_not_claim_cloud_allocation(self):
+        result = memory_capacity({'used': 200, 'limit': None, 'scope': 'proses'}, 2700000000)
+        self.assertIsNone(result['limit'])
+        self.assertIsNone(result['remaining'])
+        self.assertIsNone(service_memory_limit(self.root / 'missing.toml'))
+
+    @patch('gostream_resources.psutil.disk_usage')
+    def test_disk_reports_space_on_upload_filesystem_and_preserves_available_bytes(self, usage):
+        (self.root / 'uploads').mkdir()
+        usage.return_value = SimpleNamespace(total=20000000000, used=1800000000, free=17700000000)
+        result = disk_capacity(self.root)
+        self.assertEqual(result, {'total': 20000000000, 'used': 1800000000, 'free': 17700000000, 'reserved': 500000000})
+        usage.assert_called_once_with(str(self.root / 'uploads'))
+
+    @patch('gostream_resources.psutil.disk_usage')
+    def test_disk_decreases_after_storage_consumption_and_reports_unavailable(self, usage):
+        usage.side_effect = [SimpleNamespace(total=20000000000, used=0, free=20000000000),
+                             SimpleNamespace(total=20000000000, used=600000000, free=19400000000),
+                             PermissionError()]
+        before, after = disk_capacity(self.root), disk_capacity(self.root)
+        self.assertEqual(before['free'] - after['free'], 600000000)
+        self.assertIsNone(disk_capacity(self.root))
 
 
 if __name__ == '__main__':
