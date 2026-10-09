@@ -5,7 +5,7 @@ Studio streaming YouTube berbasis Streamlit dengan tema putih dan merah.
 - Playlist hingga 5 video, atau satu video berulang dengan playlist MP3.
 - Sumber video dari perangkat, URL langsung, atau Google Drive.
 - Pilihan mode Shorts, jumlah pengulangan, dan durasi siaran.
-- Monitoring proses siaran, CPU, memori, dan trafik jaringan server.
+- Monitoring proses siaran, RAM/CPU aplikasi, storage file, dan trafik jaringan runtime.
 
 ## Deploy ke Streamlit Community Cloud
 
@@ -35,7 +35,15 @@ Masukkan Stream Key YouTube melalui form aplikasi. Jangan simpan stream key di r
 
 ## Monitoring dan penyimpanan
 
-Monitoring diperbarui setiap 2 detik selama halaman aktif. Stream aktif menghitung proses FFmpeg aplikasi, bukan konfirmasi status live dari YouTube. CPU dan RAM mengikuti data sistem operasi; pada hosting bersama nilainya dapat mencerminkan host. Trafik jaringan menunjukkan penggunaan aktual, bukan kecepatan maksimum koneksi.
+Monitoring diperbarui setiap 2 detik selama halaman aktif; ukuran file setiap 15 detik.
+
+- **Stream aktif:** proses FFmpeg aplikasi dengan tujuan RTMP, bukan konfirmasi status live dari YouTube.
+- **RAM:** `memory.current` / `memory.max` pada cgroup v2, atau padanannya pada v1. Batas induk yang terlihat ikut diperiksa. Jika tidak tersedia, tampilkan agregat RSS proses aplikasi dan turunannya, tanpa menganggap RAM host sebagai jatah aplikasi. RSS dapat menghitung memori bersama lebih dari sekali.
+- **CPU:** selisih waktu CPU cgroup terhadap waktu nyata, dibandingkan dengan batas quota CPU yang terdeteksi. Jika batas tidak tersedia, tampilkan core terpakai. Fallback menggunakan waktu CPU proses aplikasi dan turunannya.
+- **Storage:** ukuran logis file project dan uploads; mengecualikan Git, environment Python, dan cache. Tidak menggunakan kapasitas disk host sebagai kuota akun. Kuota hosting yang tidak terbaca ditandai tidak tersedia.
+- **Jaringan:** selisih byte kirim/terima interface non-loopback pada namespace jaringan yang terlihat. Bisa mencakup proses lain jika namespace dibagi; pada komputer lokal ini mencakup jaringan komputer. Bukan speed test atau trafik khusus YouTube.
+
+Sumber cgroup dibaca dari `/proc/self/cgroup` dan `/proc/self/mountinfo`. Tidak ada nilai kapasitas paket Streamlit yang di-hardcode. Jika akses resource dibatasi, kartu menampilkan sumber fallback atau data tidak tersedia. Pengukuran runtime ini bukan jaminan kapasitas paket hosting. Lihat [dokumentasi cgroup Linux](https://www.kernel.org/doc/html/latest/admin-guide/cgroup-v2.html).
 
 Media tersimpan di folder `uploads/` pada server, bukan di Git. Penyimpanan ini dapat hilang saat hosting dimulai ulang atau aplikasi di-deploy ulang. Resource dan durasi streaming mengikuti batas penyedia hosting.
 

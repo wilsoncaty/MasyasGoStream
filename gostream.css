@@ -80,8 +80,8 @@ html, body, [class*="css"] { font-family: "Segoe UI", sans-serif; }
 .gs-footer > span:last-child { font-size:9px; letter-spacing:1.5px; }
 [data-testid="stExpander"] { border-color:var(--gs-line); border-radius:10px; }
 [data-testid="stExpander"] summary p { font-size:12px; color:var(--gs-muted); }
-.gs-stats-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:16px; margin:2px 0 0; }
-.gs-stat-card { min-width:0; background:var(--gs-panel); border:1px solid var(--gs-line); border-radius:13px; padding:18px 20px; }
+.gs-stats-grid { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:12px; margin:2px 0 0; }
+.gs-stat-card { min-width:0; background:var(--gs-panel); border:1px solid var(--gs-line); border-radius:13px; padding:16px; }
 .gs-stat-head { display:flex; align-items:center; justify-content:space-between; gap:8px; color:#334155; font-size:12px; font-weight:600; margin-bottom:13px; }
 .gs-stat-icon { display:grid; place-items:center; width:29px; height:29px; border-radius:8px; background:#f1f5f9; color:#64748b; font-size:17px; }
 .gs-stat-value { color:var(--gs-text); font-size:27px; line-height:1.3; font-weight:650; letter-spacing:-.7px; font-variant-numeric:tabular-nums; overflow-wrap:anywhere; }
@@ -93,7 +93,7 @@ html, body, [class*="css"] { font-family: "Segoe UI", sans-serif; }
 .gs-network-row strong { font-size:14px; font-weight:600; color:#1d4ed8; }
 .gs-download { margin-top:5px; }
 .gs-download strong { color:#15803d; }
-@media (max-width: 1100px) {
+@media (max-width: 1200px) {
   .gs-stats-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
 }
 @media (max-width: 480px) {
